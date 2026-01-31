@@ -1,0 +1,13 @@
+- name: create a shared local administrator account
+  win_user:
+    name: "{{ user }}"
+    password: "{{ password }}"
+    state: present
+    password_never_expires: true
+
+- name: add the shared account to the local Administrators group
+  win_group_membership:
+    name: Administrators
+    members:
+      - "{{ user }}"
+    state: present

@@ -1,0 +1,17 @@
+- name: Shared local administrator password
+  hosts: srv01, srv02
+  vars:
+    action: "{{ action }}" # extra-vars
+  vars_files:
+    - ../../vars/breakingbad.json
+
+  roles:
+    - role: ../../roles/vulnerabilities/12/enable
+      when: action == "enable"
+      user: "{{ local_user | default('svc_admin', true) }}" # extra-vars
+      password: "{{ local_password | default('Zomer123!', true) }}" # extra-vars
+
+    - role: ../../roles/vulnerabilities/12/disable
+      when: action == "disable"
+      user: "{{ local_user | default('svc_admin', true) }}" # extra-vars
+  gather_facts: false

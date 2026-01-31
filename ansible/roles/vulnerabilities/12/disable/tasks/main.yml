@@ -1,0 +1,11 @@
+- name: remove the shared account from the local Administrators group
+  win_group_membership:
+    name: Administrators
+    members:
+      - "{{ user }}"
+    state: absent
+
+- name: delete the shared local administrator account
+  win_user:
+    name: "{{ user }}"
+    state: absent
