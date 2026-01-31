@@ -1,6 +1,6 @@
 # Host
 host_name: dc01
-host_ip: 192.168.56.10
+host_ip: 192.168.100.10
 operating_system: windows
 
 # Vagrant

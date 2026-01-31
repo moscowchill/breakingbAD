@@ -3,10 +3,10 @@ all:
     domain_controllers:
       hosts:
         dc01:
-          ansible_host: 192.168.56.10
+          ansible_host: 192.168.100.10
     servers:
       hosts:
         srv01:
-          ansible_host: 192.168.56.20
+          ansible_host: 192.168.100.20
         srv02:
-          ansible_host: 192.168.56.21
+          ansible_host: 192.168.100.21

@@ -5,6 +5,8 @@ python/lib64
 python/venv
 python/pyvenv.cfg
 
+ansible/.venv
+
 docs/_build
 
 vagrant/.vagrant

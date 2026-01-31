@@ -1,6 +1,6 @@
 - name: set the dns IP to the IP of the domain controller (dc01)
   win_dns_client:
-    adapter_names: "Ethernet 2"
+    adapter_names: "Ethernet1"
     dns_servers:
     - "{{ hostvars['dc01']['host_ip'] }}"
 
@@ -11,7 +11,7 @@
     include_management_tools: True
 
 - name: add entity to a domain
-  win_domain_membership:
+  microsoft.ad.membership:
     dns_domain_name: "{{ domain.domain_fqdn }}"
     domain_admin_user: "{{ domain.administrator_name }}@{{ domain.domain_fqdn }}"
     domain_admin_password: "{{ domain.administrator_password }}"

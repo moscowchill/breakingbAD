@@ -38,6 +38,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
             if vm_os == "windows" then
                 dc.vm.guest = :windows
                 dc.vm.communicator = "winrm"
+                dc.vm.provision :shell, inline: "netsh advfirewall set allprofiles state off", privileged: true
                 dc.vm.provision :shell, :path => "./script/Install-WMF3Hotfix.ps1", privileged: false
                 dc.vm.provision :shell, :path => "./script/ConfigureRemotingForAnsible.ps1", privileged: false
             end
@@ -77,6 +78,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
             if vm_os == "windows" then
                 srv.vm.guest = :windows
                 srv.vm.communicator = "winrm"
+                srv.vm.provision :shell, inline: "netsh advfirewall set allprofiles state off", privileged: true
                 srv.vm.provision :shell, :path => "script/Install-WMF3Hotfix.ps1", privileged: false
                 srv.vm.provision :shell, :path => "script/ConfigureRemotingForAnsible.ps1", privileged: false
             end
