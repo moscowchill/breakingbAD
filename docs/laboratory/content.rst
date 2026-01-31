@@ -83,7 +83,7 @@ Once the image is retrieved, linked clones are created based on a master.
 
 .. tip::
 
-    The deletion of the master is to be done manually (on VirtualBox).
+    The deletion of the master is to be done manually (in VMware Workstation Pro).
 
 .. caution::
 

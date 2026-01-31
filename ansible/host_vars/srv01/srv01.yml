@@ -5,10 +5,9 @@ operating_system: windows
 
 # Vagrant
 vagrant_box: StefanScherer/windows_2019
-vagrant_box_version: 2019.05.22
 
-# VirtualBox
-vbox_name: srv01
-vbox_gui: false
-vbox_memory: 3000
-vbox_cpus: 2
+# VM Provider
+vm_name: srv01
+vm_gui: false
+vm_memory: 3000
+vm_cpus: 2

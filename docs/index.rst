@@ -64,7 +64,7 @@ The laboratory make use of the following tools:
 * `Python`_
 * `Vagrant`_
 * `Ansible`_
-* `VirtualBox`_
+* `VMware Workstation Pro`_
 
 .. Hyperlinks
 .. _`breakingbAD GitHub repository`: https://github.com/KenjiEndo15/breakingbAD
@@ -75,7 +75,7 @@ The laboratory make use of the following tools:
 .. _`Python`: https://www.python.org/
 .. _`Vagrant`: https://www.vagrantup.com/
 .. _`Ansible`: https://www.ansible.com/
-.. _`VirtualBox`: https://www.virtualbox.org/
+.. _`VMware Workstation Pro`: https://www.vmware.com/products/desktop-hypervisor/workstation-and-fusion
 
 .. Tables of content
 .. toctree::
