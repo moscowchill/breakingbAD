@@ -41,6 +41,7 @@ Here's a list:
 * **ID = 09** | ASREProasting
 * **ID = 10** | ESC1
 * **ID = 11** | Anonymous Logon special group (inside the Pre-Windows 2000 Compatible Access group)
+* **ID = 12** | Shared local administrator password
 
 Actions on vulnerabilities
 ##########################
@@ -133,3 +134,7 @@ Table of availables actions, states, and targets
       - No
       - Absent
       - dc01
+    * - 12 | Shared local administrator password
+      - No
+      - Absent
+      - srv01 & srv02

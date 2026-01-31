@@ -33,7 +33,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         config.vm.define host_name do |dc|
             dc.vm.hostname      = host_name
             dc.vm.box           = vagrant_box
-            dc.vm.network :private_network, ip: host_ip
+            dc.vm.network :private_network, ip: host_ip, vmnet_id: "vmnet8"
 
             if vm_os == "windows" then
                 dc.vm.guest = :windows
@@ -72,7 +72,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         config.vm.define host_name do |srv|
             srv.vm.hostname     = host_name
             srv.vm.box          = vagrant_box
-            srv.vm.network :private_network, ip: host_ip
+            srv.vm.network :private_network, ip: host_ip, vmnet_id: "vmnet8"
 
             if vm_os == "windows" then
                 srv.vm.guest = :windows

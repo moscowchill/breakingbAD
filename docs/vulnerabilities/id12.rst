@@ -1,0 +1,57 @@
+ID12 | Shared local administrator password
+===========================================
+A shared local administrator account is created on multiple servers
+with the same password, allowing lateral movement.
+
+Table of availables actions, states, and targets
+-------------------------------------------------
+.. list-table::
+    :header-rows: 1
+
+    * - Vulnerability ID
+      - Trigger available
+      - Default state
+      - Default target
+    * - 12 | Shared local administrator password
+      - No
+      - Absent
+      - srv01 & srv02
+
+Launch
+------
+Enable
+~~~~~~
+.. code-block::
+
+    # Current directory: ansible
+    ansible-playbook -i inventory.yml playbooks/vulnerabilities/12.yml --extra-vars "action=enable"
+
+Disable
+~~~~~~~
+.. code-block::
+
+    # Current directory: ansible
+    ansible-playbook -i inventory.yml playbooks/vulnerabilities/12.yml --extra-vars "action=disable"
+
+Implementation
+--------------
+Enable
+~~~~~~
+Creating a shared local administrator account
+on srv01 and srv02 with the same password.
+
+Reference:
+
+* `12/enable/tasks/main.yml`_
+
+Disable
+~~~~~~~
+Removing the shared local administrator account.
+
+**Reference**:
+
+* `12/disable/tasks/main.yml`_
+
+.. Hyperlinks
+.. _`12/enable/tasks/main.yml`: https://github.com/KenjiEndo15/breakingbAD/blob/main/ansible/roles/vulnerabilities/12/enable/tasks/main.yml
+.. _`12/disable/tasks/main.yml`: https://github.com/KenjiEndo15/breakingbAD/blob/main/ansible/roles/vulnerabilities/12/disable/tasks/main.yml
