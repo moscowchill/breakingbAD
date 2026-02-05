@@ -17,5 +17,5 @@
     - role: ../../roles/vulnerabilities/06/trigger
       when: action == "trigger"
       user: "{{ user_name | default('walter.white', true) }}" # extra-vars
-      share: "{{ share_name | default('share-search-walter-white', true) }}" # extra-vars
+      share: "{{ share_name | default('fakeshare', true) }}" # extra-vars (max 15 chars for NBT-NS)
   gather_facts: false
