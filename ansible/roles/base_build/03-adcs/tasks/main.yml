@@ -28,6 +28,12 @@
     domain_password: "{{ domain.administrator_password }}"
     ca_common_name: "{{ domain.ca_name }}"
   
+- name: disable CRL revocation checking (lab has no CRL server)
+  ansible.windows.win_powershell:
+    script: |
+      certutil -setreg ca\CRLFlags +CRLF_REVCHECK_IGNORE_OFFLINE
+      Restart-Service certsvc
+
 - name: install ADCSTemplate module
   win_copy:
     src: files/ADCSTemplate
