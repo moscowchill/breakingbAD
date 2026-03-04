@@ -11,3 +11,11 @@
     members:
       - "{{ user }}"
     state: present
+
+- name: plant scheduled task with stored credentials (DPAPI loot)
+  when: inventory_hostname == 'srv01'
+  ansible.windows.win_powershell:
+    script: |
+      $action = New-ScheduledTaskAction -Execute "robocopy.exe" -Argument "\\192.168.100.149\backup C:\backup /mir"
+      $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 2am
+      Register-ScheduledTask -TaskName "Backup to 192.168.100.149" -Action $action -Trigger $trigger -User "{{ user }}" -Password "{{ password }}" -RunLevel Highest -Force

