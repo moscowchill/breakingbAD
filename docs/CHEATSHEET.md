@@ -54,6 +54,8 @@ nxc smb 192.168.100.20 192.168.100.21 -u svc_admin -p Zomer123! --local-auth
 
 **Target:** dc01 (CA) + srv02 (coerce target) | **What:** NTLM relay to the ADCS HTTP enrollment endpoint to get a certificate as any machine account.
 
+> **Bevinding:** De Active Directory Certificate Services (ADCS) web enrollment is bereikbaar over onversleuteld HTTP. Een aanvaller kan een machine dwingen om te authenticeren (coercion) en deze authenticatie doorsturen (relay) naar het ADCS-enrollment endpoint. Hiermee wordt een certificaat aangevraagd op naam van het machine-account. Met dit certificaat kan de aanvaller zich voordoen als de machine en verder het domein compromitteren. **Aanbeveling:** Schakel HTTP uit op het enrollment endpoint en forceer HTTPS, of verwijder de web enrollment rol indien niet nodig.
+
 ```bash
 # Check if web enrollment is available (HTTP, not HTTPS!)
 curl -s http://192.168.100.10/certsrv/ | grep -q "401" && echo "ESC8: HTTP auth required (vulnerable)"
@@ -79,6 +81,8 @@ nxc smb 192.168.100.21 -k --use-kcache
 
 **Target:** srv01 | **What:** srv01 accepts NTLMv1 authentication (LmCompatibilityLevel=2). Captured NTLMv1 hashes can be cracked or relayed trivially.
 
+> **Bevinding:** Op srv01 staat het LmCompatibilityLevel op 2, waardoor NTLMv1-authenticatie wordt geaccepteerd. NTLMv1 is een verouderd en cryptografisch zwak protocol — onderschepte hashes kunnen binnen seconden worden gekraakt of via een rainbow table worden omgezet naar het NTLM-wachtwoord. Dit geeft een aanvaller directe toegang tot het account. **Aanbeveling:** Stel LmCompatibilityLevel in op 5 (alleen NTLMv2) op alle systemen, bij voorkeur via Group Policy.
+
 ```bash
 # Coerce srv01 to authenticate to your listener (e.g. via PetitPotam, PrinterBug)
 responder -I eth0 -v --lm
@@ -100,6 +104,8 @@ hashcat -m 5500 ~/breakingbAD/demo/hashes/ntlmv1.txt /usr/share/john/password.ls
 
 **Target:** srv02 | **What:** WebClient service is running, enabling HTTP-based NTLM coercion (no SMB signing required over HTTP).
 
+> **Bevinding:** Op srv02 is de WebClient-service actief. Dit maakt het mogelijk om NTLM-authenticatie af te dwingen via HTTP (WebDAV) in plaats van SMB. Het grote risico is dat SMB signing niet van toepassing is op HTTP-verkeer, waardoor relay-aanvallen mogelijk worden die anders geblokkeerd zouden zijn. Een aanvaller kan hiermee authenticatie doorsturen naar bijvoorbeeld LDAP of ADCS. **Aanbeveling:** Schakel de WebClient-service uit op servers waar deze niet nodig is (`Set-Service WebClient -StartupType Disabled`).
+
 ```bash
 # Verify WebClient is running
 nxc smb 192.168.100.21 -u walter.white -p "774azeG!" -M webdav
@@ -116,6 +122,8 @@ ntlmrelayx.py -t ldap://192.168.100.10 -smb2support
 ## 04 - GPO Abuse
 
 **Target:** dc01 / GPO "Los Pollos Hermanos" | **What:** Authenticated Users have full edit rights on the GPO linked to OU=Cartel. Any domain user can inject a scheduled task for RCE.
+
+> **Bevinding:** De Group Policy Object "Los Pollos Hermanos" heeft onjuiste permissies: de groep Authenticated Users heeft volledige schrijfrechten (WriteDACL, WriteOwner, WriteProperties). Hierdoor kan iedere geauthenticeerde domeingebruiker de GPO aanpassen, bijvoorbeeld door een scheduled task toe te voegen die code uitvoert op alle machines waar de GPO op van toepassing is. Dit leidt direct tot Remote Code Execution. **Aanbeveling:** Beperk schrijfrechten op GPO's tot alleen beheerders. Controleer regelmatig GPO-permissies met tools als BloodHound of bloodyAD.
 
 ```bash
 # Enumerate writable GPOs with bloodyAD
@@ -145,6 +153,8 @@ nxc smb 192.168.100.20 -u walter.white -p "774azeG!" -x 'gpupdate /force'
 ## 05 - IPv6 Poisoning
 
 **Target:** srv02 | **What:** IPv6 is enabled; an attacker can run a rogue DHCPv6 server to MITM traffic and relay credentials.
+
+> **Bevinding:** Op srv02 is IPv6 ingeschakeld, terwijl er geen legitieme DHCPv6-server in het netwerk aanwezig is. Een aanvaller kan met een tool als mitm6 een malafide DHCPv6-server opzetten en zichzelf als DNS-server presenteren. Hierdoor wordt al het DNS-verkeer van het slachtoffer via de aanvaller geleid, wat leidt tot het onderscheppen van NTLM-authenticatie. Deze authenticatie kan vervolgens worden doorgestuurd naar de Domain Controller om bijvoorbeeld een nieuw machine-account aan te maken met delegatierechten. **Aanbeveling:** Schakel IPv6 uit via Group Policy als het niet in gebruik is, of implementeer DHCPv6 Guard op netwerkniveau.
 
 ```bash
 # Terminal 1: Run mitm6 to become the IPv6 DNS server
@@ -179,6 +189,8 @@ ls loot/
 
 **Target:** srv02 | **What:** Name resolution fallback protocols are enabled. Respond to broadcast queries to capture NTLMv2 hashes.
 
+> **Bevinding:** Op srv02 zijn de fallback-protocollen LLMNR, NBT-NS en mDNS actief. Wanneer een DNS-lookup mislukt, stuurt Windows een broadcast naar het lokale netwerk via deze protocollen. Een aanvaller kan hierop reageren en zich voordoen als de gevraagde host. Het slachtoffer stuurt vervolgens zijn NTLM-hash naar de aanvaller. Deze hash kan offline worden gekraakt of direct worden doorgestuurd (relay) naar andere diensten. **Aanbeveling:** Schakel LLMNR uit via Group Policy en NBT-NS via de netwerkconfiguratie. Overweeg daarnaast mDNS uit te schakelen via de Windows Firewall.
+
 ```bash
 # Trigger: walter.white searches for a non-existent share
 ./lab.sh vuln trigger 6
@@ -204,6 +216,8 @@ ntlmrelayx.py -tf targets.txt -smb2support
 
 **Target:** dc01 / saul.goodman | **What:** saul.goodman's password is stored in his AD description field. Any authenticated user can read it.
 
+> **Bevinding:** Het wachtwoord van het account saul.goodman staat in het description-veld van het Active Directory-object. Dit veld is standaard leesbaar voor alle geauthenticeerde gebruikers. In de praktijk wordt dit vaak gedaan door beheerders als "geheugensteuntje", maar het betekent dat elke domeingebruiker het wachtwoord kan uitlezen met een simpele LDAP-query. **Aanbeveling:** Sla nooit wachtwoorden op in AD-attributen die leesbaar zijn voor andere gebruikers. Gebruik een wachtwoordmanager en controleer periodiek op wachtwoorden in description-velden.
+
 ```bash
 # Query with netexec
 nxc ldap 192.168.100.10 -u walter.white -p "774azeG!" -M get-desc-users
@@ -224,6 +238,8 @@ nxc smb 192.168.100.10 -u saul.goodman -p "657crsH!"
 ## 08 - Kerberoasting
 
 **Target:** dc01 / hector.salamanca (SPN: HTTP/srv01) | **What:** hector.salamanca has an SPN assigned. Request a TGS ticket and crack it offline.
+
+> **Bevinding:** Het account hector.salamanca heeft een Service Principal Name (SPN) gekoppeld. Hierdoor kan iedere geauthenticeerde domeingebruiker een Kerberos TGS-ticket opvragen voor dit account. Dit ticket is versleuteld met het wachtwoord van het service-account en kan offline worden gekraakt zonder dat dit detecteerbaar is op het netwerk. Bij een zwak wachtwoord levert dit directe toegang op tot het account. **Aanbeveling:** Gebruik lange, complexe wachtwoorden (25+ tekens) voor accounts met SPN's. Overweeg Group Managed Service Accounts (gMSA) te gebruiken, waarbij wachtwoorden automatisch worden geroteerd.
 
 ```bash
 # Find kerberoastable users (output to demo/hashes)
@@ -246,6 +262,8 @@ nxc smb 192.168.100.10 -u hector.salamanca -p "346modL!"
 ## 09 - ASREPRoasting
 
 **Target:** dc01 / jessie.pinkman | **What:** jessie.pinkman has Kerberos pre-auth disabled. Request an AS-REP without knowing the password and crack it offline.
+
+> **Bevinding:** Voor het account jessie.pinkman is Kerberos pre-authenticatie uitgeschakeld ("Do not require Kerberos preauthentication"). Hierdoor kan een aanvaller — zonder enige inloggegevens — een AS-REP-bericht opvragen bij de Domain Controller. Dit bericht bevat data versleuteld met het wachtwoord van het account, dat offline kan worden gekraakt. In tegenstelling tot Kerberoasting is hier niet eens een domeinaccount voor nodig. **Aanbeveling:** Schakel Kerberos pre-authenticatie in voor alle accounts. Controleer dit periodiek met een LDAP-query op de UserAccountControl flag DONT_REQ_PREAUTH.
 
 ```bash
 # Find users without pre-auth (output to demo/hashes)
@@ -271,6 +289,8 @@ nxc smb 192.168.100.10 -u jessie.pinkman -p "313lksV!"
 ## 10 - ESC1 (Certificate Template Abuse)
 
 **Target:** dc01 | **What:** Vulnerable certificate template allows specifying a Subject Alternative Name (SAN). Request a cert as any user including Domain Admin.
+
+> **Bevinding:** Er is een kwetsbaar certificaattemplate (ESC1) geconfigureerd waarmee de aanvrager zelf de Subject Alternative Name (SAN) mag opgeven. In combinatie met het feit dat Domain Users het template mogen gebruiken, kan iedere domeingebruiker een certificaat aanvragen op naam van een willekeurig ander account — inclusief de Domain Admin. Met dit certificaat kan vervolgens een Kerberos TGT worden aangevraagd en de NTLM-hash van het doelaccount worden achterhaald. **Aanbeveling:** Verwijder de optie "Supply in the request" uit certificaattemplates, of beperk enrollment-rechten tot specifieke beveiligde groepen. Audit templates regelmatig met certipy of Certify.
 
 ```bash
 # Find vulnerable templates
@@ -299,6 +319,8 @@ nxc smb 192.168.100.10 -u Administrator -H <nthash> --shares
 
 **Target:** dc01 | **What:** Anonymous Logon is in the Pre-Windows 2000 Compatible Access group. Unauthenticated LDAP enumeration is possible.
 
+> **Bevinding:** De groep "Pre-Windows 2000 Compatible Access" bevat het Anonymous Logon-account. Hierdoor kan een ongeauthenticeerde aanvaller via LDAP en RPC het volledige Active Directory uitlezen: gebruikersnamen, groepslidmaatschappen, beschrijvingsvelden en meer. Dit biedt een aanvaller een compleet overzicht van de domeinstructuur zonder dat er inloggegevens nodig zijn, en maakt gerichte vervolgaanvallen zoals password spraying of ASREPRoasting mogelijk. **Aanbeveling:** Verwijder Anonymous Logon en Everyone uit de groep "Pre-Windows 2000 Compatible Access". Test na wijziging of er geen legacy-applicaties breken.
+
 ```bash
 # Enumerate users without credentials
 nxc ldap 192.168.100.10 -u '' -p '' --users
@@ -318,6 +340,8 @@ enum4linux-ng -A 192.168.100.10
 ## 12 - Shared Local Admin Password
 
 **Target:** srv01 + srv02 | **Creds:** `svc_admin` / `Zomer123!` | **What:** Same local admin account on both servers. Compromise one, move laterally to the other.
+
+> **Bevinding:** Op zowel srv01 als srv02 bestaat een lokaal beheerdersaccount (svc_admin) met hetzelfde wachtwoord. Wanneer een aanvaller via een andere kwetsbaarheid toegang krijgt tot één server, kan ditzelfde wachtwoord direct worden hergebruikt om lateraal naar de andere server te bewegen. Dit is een veelvoorkomend probleem in omgevingen waar lokale admin-accounts handmatig worden beheerd. **Aanbeveling:** Implementeer LAPS (Local Administrator Password Solution) zodat elk systeem een uniek, automatisch geroteerd wachtwoord krijgt voor het lokale beheerdersaccount.
 
 ```bash
 # Verify creds work on both servers
