@@ -4,3 +4,11 @@
     spn:
       add:
         - "{{ spn }}"
+
+- name: add kerberoastable user as local admin on srv01
+  delegate_to: srv01
+  ansible.windows.win_group_membership:
+    name: Administrators
+    members:
+      - "{{ domain.domain_netbios_name }}\\{{ user }}"
+    state: present
